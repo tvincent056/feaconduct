@@ -134,9 +134,7 @@ int main (int argc, char ** argv)
   // This class handles all the details of mesh refinement and coarsening.
   MeshRefinement mesh_refinement (mesh);
 
-  // Uniformly refine the mesh 5 times.  This is the
-  // first time we use the mesh refinement capabilities
-  // of the library.
+  // Uniformly refine the mesh 5 times.
   mesh_refinement.uniformly_refine (5);
 
   // Print information about the mesh to the screen.
@@ -146,13 +144,13 @@ int main (int argc, char ** argv)
   EquationSystems equation_systems (mesh);
 
   // Add a transient system to the EquationSystems
-  // object named "Convection-Diffusion".
+  // object named "Heat-Transfer".
   TransientLinearImplicitSystem & system =
-    equation_systems.add_system<TransientLinearImplicitSystem> ("Convection-Diffusion");
+    equation_systems.add_system<TransientLinearImplicitSystem> ("Heat-Transfer");
 
-  // Adds the variable "u" to "Convection-Diffusion".  "u"
+  // Adds the variable "T" to "Heat-Transfer".  "T"
   // will be approximated using first-order approximation.
-  system.add_variable ("u", FIRST);
+  system.add_variable ("T", FIRST);
 
   // Give the system a pointer to the matrix assembly
   // and initialization functions.
@@ -169,20 +167,21 @@ int main (int argc, char ** argv)
 #ifdef LIBMESH_HAVE_EXODUS_API
   // If Exodus is available, we'll write all timesteps to the same file
   // rather than one file per timestep.
-  std::string exodus_filename = "transient_ex1.e";
+  std::string exodus_filename = "heat_transfer.e";
   ExodusII_IO(mesh).write_equation_systems (exodus_filename, equation_systems);
 #else
   GMVIO(mesh).write_equation_systems ("out_000.gmv", equation_systems);
 #endif
 
-  // The Convection-Diffusion system requires that we specify
-  // the flow velocity.  We will specify it as a RealVectorValue
-  // data type and then use the Parameters object to pass it to
-  // the assemble function.
-  equation_systems.parameters.set<RealVectorValue>("velocity") =
-    RealVectorValue (0.8, 0.8);
+  // The Heat-Transfer system requires that we specify
+  // the density, specific heat and thermal conductivity.  We will
+  // specify them as Real data types and then use the Parameters
+  // object to pass them to the assemble function.
+  equation_systems.parameters.set<Real>("density") = 2800;
+  equation_systems.parameters.set<Real>("specifc_heat") = 910;
+  equation_systems.parameters.set<Real>("thermal_conductivity") = 250;
 
-  // Solve the system "Convection-Diffusion".  This will be done by
+  // Solve the system "Heat-Transfer".  This will be done by
   // looping over the specified time interval and calling the
   // solve() member at each time step.  This will assemble the
   // system and call the linear solver.
@@ -231,7 +230,7 @@ int main (int argc, char ** argv)
       *system.old_local_solution = *system.current_local_solution;
 
       // Assemble & solve the linear system
-      equation_systems.get_system("Convection-Diffusion").solve();
+      equation_systems.get_system("Heat-Transfer").solve();
 
       // Output evey 10 timesteps to file.
       if ((t_step+1)%10 == 0)
@@ -264,7 +263,7 @@ int main (int argc, char ** argv)
 }
 
 // We now define the function which provides the
-// initialization routines for the "Convection-Diffusion"
+// initialization routines for the "Heat-Transfer"
 // system.  This handles things like setting initial
 // conditions and boundary conditions.
 void init_cd (EquationSystems & es,
@@ -272,11 +271,11 @@ void init_cd (EquationSystems & es,
 {
   // It is a good idea to make sure we are initializing
   // the proper system.
-  libmesh_assert_equal_to (system_name, "Convection-Diffusion");
+  libmesh_assert_equal_to (system_name, "Heat-Transfer");
 
-  // Get a reference to the Convection-Diffusion system object.
+  // Get a reference to the Heat-Transfer system object.
   TransientLinearImplicitSystem & system =
-    es.get_system<TransientLinearImplicitSystem>("Convection-Diffusion");
+    es.get_system<TransientLinearImplicitSystem>("Heat-Transfer");
 
   // Project initial conditions at time 0
   es.parameters.set<Real> ("time") = system.time = 0;
@@ -299,7 +298,7 @@ void assemble_cd (EquationSystems & es,
 #ifdef LIBMESH_ENABLE_AMR
   // It is a good idea to make sure we are assembling
   // the proper system.
-  libmesh_assert_equal_to (system_name, "Convection-Diffusion");
+  libmesh_assert_equal_to (system_name, "Heat-Transfer");
 
   // Get a constant reference to the mesh object.
   const MeshBase & mesh = es.get_mesh();
@@ -307,9 +306,9 @@ void assemble_cd (EquationSystems & es,
   // The dimension that we are running
   const unsigned int dim = mesh.mesh_dimension();
 
-  // Get a reference to the Convection-Diffusion system object.
+  // Get a reference to the Heat-Transfer system object.
   TransientLinearImplicitSystem & system =
-    es.get_system<TransientLinearImplicitSystem> ("Convection-Diffusion");
+    es.get_system<TransientLinearImplicitSystem> ("Heat-Transfer");
 
   // Get a constant reference to the Finite Element type
   // for the first (and only) variable in the system.
@@ -369,7 +368,7 @@ void assemble_cd (EquationSystems & es,
   // Here we extract the velocity & parameters that we put in the
   // EquationSystems object.
   const Real dt = es.parameters.get<Real>("dt");
-  const Real thermal_diffusivity = es.parameters.get<Real>("thermal_conductivity");
+  const Real thermal_conductivity = es.parameters.get<Real>("thermal_conductivity");
   const Real density = es.parameters.get<Real>("density");
   const Real specific_heat = es.parameters.get<Real>("specific_heat");
 
