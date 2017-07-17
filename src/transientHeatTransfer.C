@@ -88,20 +88,13 @@ void assemble_cd (EquationSystems & es,
 void init_cd (EquationSystems & es,
               const std::string & system_name);
 
-// Exact solution function prototype.  This gives the exact
-// solution as a function of space and time.  In this case the
-// initial condition will be taken as the exact solution at time 0,
-// as will the Dirichlet boundary conditions at time t.
-Real exact_solution (const Real x,
-                     const Real y,
-                     const Real t);
-
 Number exact_value (const Point & p,
                     const Parameters & parameters,
                     const std::string &,
                     const std::string &)
 {
-  return exact_solution(p(0), p(1), parameters.get<Real> ("time"));
+  // return exact_solution(p(0), p(1), parameters.get<Real> ("time"));
+    return heat_sink_bc(p(0), p(1), parameters.get<Real> ("time"));
 }
 
 
