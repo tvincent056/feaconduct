@@ -61,6 +61,15 @@
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
 
+const boundary_id_type HEAT_SINK_BOUNDARY = 1;
+const boundary_id_type HEAT_FLUX_BOUNDARY = 2;
+
+// Function prototype for heat flux boundary condition
+Real heat_flux_bc(const Real x, const Real y, const Real t);
+
+// Function prototype for heat sink (constant temperature) boundary condition
+Real heat_sink_bc(const Real x, const Real y, const Real t);
+
 // Function prototype.  This function will assemble the system
 // matrix and right-hand-side at each time step.  Note that
 // since the system is linear we technically do not need to
@@ -512,4 +521,14 @@ void assemble_cd (EquationSystems & es,
 
   // That concludes the system matrix assembly routine.
 #endif // #ifdef LIBMESH_ENABLE_AMR
+}
+
+Real heat_flux_bc(const Real x, const Real y, const Real t)
+{
+    return 107.;
+}
+
+Real heat_sink_bc(const Real x, const Real y, const Real t)
+{
+    return 284.;
 }
