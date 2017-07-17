@@ -178,7 +178,7 @@ int main (int argc, char ** argv)
   // specify them as Real data types and then use the Parameters
   // object to pass them to the assemble function.
   equation_systems.parameters.set<Real>("density") = 2800;
-  equation_systems.parameters.set<Real>("specifc_heat") = 910;
+  equation_systems.parameters.set<Real>("specific_heat") = 910;
   equation_systems.parameters.set<Real>("thermal_conductivity") = 250;
 
   // Solve the system "Heat-Transfer".  This will be done by
