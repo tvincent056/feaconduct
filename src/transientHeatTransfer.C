@@ -140,7 +140,7 @@ int main (int argc, char ** argv)
   // looping over the specified time interval and calling the
   // solve() member at each time step.  This will assemble the
   // system and call the linear solver.
-  const Real dt = 0.025;
+  const Real dt = 1728.;
   system.time = 0.;
 
   for (unsigned int t_step = 0; t_step < 50; t_step++)
@@ -482,7 +482,8 @@ void assemble_cd (EquationSystems & es,
 
 Real heat_flux_bc(const Real x, const Real y, const Real t)
 {
-    return 107.;
+    // return 107.;
+    return 1000.;
 }
 
 Real heat_sink_bc(const Real x, const Real y, const Real t)
