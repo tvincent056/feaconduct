@@ -24,14 +24,19 @@
 
 using namespace libMesh;
 
-const boundary_id_type HEAT_SINK_BOUNDARY = 1;
-const boundary_id_type HEAT_FLUX_BOUNDARY = 2;
+const boundary_id_type BOTTOM_BOUNDARY = 1;
+const boundary_id_type TOP_BOUNDARY = 2;
 
-// Function prototype for heat flux boundary condition
+const std::string TOP_BOUNDARY_TYPE = "moving_heat_flux";
+const std::string BOTTOM_BOUNDARY_TYPE = "prescribed_temperature";
+
+// Function for heat flux boundary condition
 Real heat_flux_bc(const Real x, const Real y, const Real t);
 
-// Function prototype for heat sink (constant temperature) boundary condition
-Real heat_sink_bc(const Real x, const Real y, const Real t);
+// Function for heat sink (constant temperature) boundary condition
+Real temperature_bc(const Real x, const Real y, const Real t);
+
+Real moving_heat_flux(const Real x, const Real y, const Real t);
 
 // Function for matrix assembly
 void assemble_cd (EquationSystems & es,
@@ -41,16 +46,23 @@ void assemble_cd (EquationSystems & es,
 void init_cd (EquationSystems & es,
               const std::string & system_name);
 
-Number exact_value (const Point & p,
+Number initial_value (const Point & p,
                     const Parameters & parameters,
                     const std::string &,
-                    const std::string &)
-{
-  // return exact_solution(p(0), p(1), parameters.get<Real> ("time"));
-    return heat_sink_bc(p(0), p(1), parameters.get<Real> ("time"));
-}
+                    const std::string &);
 
+void add_bc(DenseMatrix<Number>& Ke, DenseVector<Number>& Fe,
+     const std::vector<Real>& JxW_face, const std::vector<std::vector<Real> >& psi,
+     const QGauss& qface, const std::vector<Point>& qface_points,
+     const std::string& boundary_type, const Real time, const Real dt);
 
+void add_dirichlet_bc(DenseMatrix<Number>& Ke, DenseVector<Number>& Fe,
+     const std::vector<Real>& JxW_face, const std::vector<std::vector<Real> >& psi,
+     const QGauss& qface, const std::vector<Point>& qface_points, const Real time, const Real dt);
+
+ void add_neumann_bc(DenseVector<Number>& Fe, const std::vector<Real>& JxW_face,
+       const std::vector<std::vector<Real> >& psi, const QGauss& qface,
+       const std::vector<Point>& qface_points, const Real time, const Real dt, Real fptr(const Real x, const Real y, const Real t));
 
 // We can now begin the main program.  Note that this
 // example will fail if you are using complex numbers
@@ -132,18 +144,21 @@ int main (int argc, char ** argv)
   // the density, specific heat and thermal conductivity.  We will
   // specify them as Real data types and then use the Parameters
   // object to pass them to the assemble function.
-  equation_systems.parameters.set<Real>("density") = 2800;
-  equation_systems.parameters.set<Real>("specific_heat") = 910;
-  equation_systems.parameters.set<Real>("thermal_conductivity") = 250;
+  // equation_systems.parameters.set<Real>("density") = 2800;
+  // equation_systems.parameters.set<Real>("specific_heat") = 910;
+  // equation_systems.parameters.set<Real>("thermal_conductivity") = 250;
+  equation_systems.parameters.set<Real>("density") = 8000;
+  equation_systems.parameters.set<Real>("specific_heat") = 500;
+  equation_systems.parameters.set<Real>("thermal_conductivity") = 16;
 
   // Solve the system "Heat-Transfer".  This will be done by
   // looping over the specified time interval and calling the
   // solve() member at each time step.  This will assemble the
   // system and call the linear solver.
-  const Real dt = 1728.;
+  const Real dt = 0.02;
   system.time = 0.;
 
-  for (unsigned int t_step = 0; t_step < 50; t_step++)
+  for (unsigned int t_step = 0; t_step < 500; t_step++)
     {
       // Incremenet the time counter, set the time and the
       // time step size as parameters in the EquationSystem.
@@ -235,7 +250,7 @@ void init_cd (EquationSystems & es,
   // Project initial conditions at time 0
   es.parameters.set<Real> ("time") = system.time = 0;
 
-  system.project_solution(exact_value, libmesh_nullptr, es.parameters);
+  system.project_solution(initial_value, libmesh_nullptr, es.parameters);
 }
 
 
@@ -301,6 +316,8 @@ void assemble_cd (EquationSystems & es,
 
     // The XY locations of the quadrature points used for face integration
     const std::vector<Point> & qface_points = fe_face->get_xyz();
+
+    const std::vector<Point> & qrule_points = fe->get_xyz();
 
     // A reference to the DofMap object for this system.  The DofMap
     // object handles the index translation from node and element numbers
@@ -390,6 +407,10 @@ void assemble_cd (EquationSystems & es,
             // Now compute the element matrix and RHS contributions.
             for (std::size_t i=0; i<phi.size(); i++)
             {
+                const Number flux = moving_heat_flux (qrule_points[qp](0),
+                                                  qrule_points[qp](1),
+                                                  system.time);
+
                 // The RHS contribution
                 Fe(i) += JxW[qp]*(
                                   // heat capacity matrix term
@@ -397,6 +418,7 @@ void assemble_cd (EquationSystems & es,
                                   -.5*dt*(
                                           // Diffusion term
                                           thermal_conductivity*(grad_T_old*dphi[i][qp]))
+                                        //   + flux*phi[i][qp]
                                   );
 
                 for (std::size_t j=0; j<phi.size(); j++)
@@ -416,9 +438,6 @@ void assemble_cd (EquationSystems & es,
 
         //apply BCs
         {
-            // The penalty value.
-            const Real penalty = 1.e10;
-
             // The following loops over the sides of the element.
             // If the element has no neighbor on a side then that
             // side MUST live on a boundary of the domain.
@@ -428,36 +447,13 @@ void assemble_cd (EquationSystems & es,
                 {
                     fe_face->reinit(elem, s);
 
-                    if (mesh.get_boundary_info().has_boundary_id (elem, s, HEAT_SINK_BOUNDARY))
+                    if (mesh.get_boundary_info().has_boundary_id (elem, s, BOTTOM_BOUNDARY))
                     {
-                        for (unsigned int qp=0; qp<qface.n_points(); qp++)
-                        {
-                            const Number value = heat_sink_bc (qface_points[qp](0),
-                                                               qface_points[qp](1),
-                                                               system.time);
-
-                            // RHS contribution
-                            for (std::size_t i=0; i<psi.size(); i++)
-                                Fe(i) += penalty*JxW_face[qp]*value*psi[i][qp];
-
-                            // Matrix contribution
-                            for (std::size_t i=0; i<psi.size(); i++)
-                                for (std::size_t j=0; j<psi.size(); j++)
-                                    Ke(i,j) += penalty*JxW_face[qp]*psi[i][qp]*psi[j][qp];
-                        }
+                        add_bc(Ke, Fe, JxW_face, psi, qface, qface_points, BOTTOM_BOUNDARY_TYPE, system.time, dt);
                     }
-                    else if(mesh.get_boundary_info().has_boundary_id (elem, s, HEAT_FLUX_BOUNDARY))
+                    else if(mesh.get_boundary_info().has_boundary_id (elem, s, TOP_BOUNDARY))
                     {
-                        for (unsigned int qp=0; qp<qface.n_points(); qp++)
-                        {
-                            const Number flux = heat_flux_bc (qface_points[qp](0),
-                                                              qface_points[qp](1),
-                                                              system.time);
-
-                            // RHS contribution
-                            for (std::size_t i=0; i<psi.size(); i++)
-                                Fe(i) += JxW_face[qp]*flux*dt*psi[i][qp];
-                        }
+                        add_bc(Ke, Fe, JxW_face, psi, qface, qface_points, TOP_BOUNDARY_TYPE, system.time, dt);
                     }
                     //otherwise a natural zero heat flux BC is applied
                 }
@@ -480,13 +476,133 @@ void assemble_cd (EquationSystems & es,
 #endif // #ifdef LIBMESH_ENABLE_AMR
 }
 
+void add_bc(DenseMatrix<Number>& Ke, DenseVector<Number>& Fe,
+     const std::vector<Real>& JxW_face, const std::vector<std::vector<Real> >& psi,
+     const QGauss& qface, const std::vector<Point>& qface_points,
+     const std::string& boundary_type, const Real time, const Real dt)
+{
+    if (boundary_type == "heat_flux")
+    {
+        add_neumann_bc(Fe, JxW_face, psi, qface, qface_points, time, dt, heat_flux_bc);
+    }
+    else if (boundary_type == "prescribed_temperature")
+    {
+        add_dirichlet_bc(Ke, Fe, JxW_face, psi, qface, qface_points, time, dt);
+    }
+    else if (boundary_type == "moving_heat_flux")
+    {
+        add_neumann_bc(Fe, JxW_face, psi, qface, qface_points, time, dt, moving_heat_flux);
+    }
+}
+
+void add_dirichlet_bc(DenseMatrix<Number>& Ke, DenseVector<Number>& Fe,
+     const std::vector<Real>& JxW_face, const std::vector<std::vector<Real> >& psi,
+     const QGauss& qface, const std::vector<Point>& qface_points, const Real time,
+     const Real dt)
+{
+    const Real penalty = 1.e10;
+
+    for (unsigned int qp=0; qp<qface.n_points(); qp++)
+    {
+        const Number value_old = temperature_bc (qface_points[qp](0),
+                                           qface_points[qp](1),
+                                           time - dt);
+
+        const Number value_new = temperature_bc (qface_points[qp](0),
+                                           qface_points[qp](1),
+                                           time);
+
+        const Number value = 0.5 * (value_old + value_new);
+
+        // RHS contribution
+        for (std::size_t i=0; i<psi.size(); i++)
+            Fe(i) += penalty*JxW_face[qp]*value*psi[i][qp];
+
+        // Matrix contribution
+        for (std::size_t i=0; i<psi.size(); i++)
+            for (std::size_t j=0; j<psi.size(); j++)
+                Ke(i,j) += penalty*JxW_face[qp]*psi[i][qp]*psi[j][qp];
+    }
+}
+
+void add_neumann_bc(DenseVector<Number>& Fe, const std::vector<Real>& JxW_face,
+      const std::vector<std::vector<Real> >& psi, const QGauss& qface,
+      const std::vector<Point>& qface_points, const Real time, const Real dt,
+      Real fptr(const Real x, const Real y, const Real t))
+{
+    for (unsigned int qp=0; qp<qface.n_points(); qp++)
+    {
+        const Number flux_old = fptr (qface_points[qp](0),
+                                      qface_points[qp](1),
+                                      time - dt);
+        const Number flux_new = fptr (qface_points[qp](0),
+                                      qface_points[qp](1),
+                                      time);
+
+        const Number flux = 0.5*(flux_old + flux_new);
+
+        // RHS contribution
+        for (std::size_t i=0; i<psi.size(); i++)
+            Fe(i) += JxW_face[qp]*flux*dt*psi[i][qp];
+    }
+}
+
 Real heat_flux_bc(const Real x, const Real y, const Real t)
 {
     // return 107.;
-    return 1000.;
+    // return 1000.;
+    return 0.;
+    // const Real omega = 2 * M_PI / 20000.;
+    // return 10000. * (sin(omega * t) + 1.);
 }
 
-Real heat_sink_bc(const Real x, const Real y, const Real t)
+Real temperature_bc(const Real x, const Real y, const Real t)
 {
-    return 284.;
+    return 293.;
+    // const Real omega = 2 * M_PI / 10.;
+    // return 334. + 50. * cos(omega*t);
+}
+
+Real moving_heat_flux(const Real x, const Real y, const Real t)
+{
+    Point center;
+
+    const Real tmax = 10.;
+
+    if (t < tmax)
+    {
+        const Real speed = 8e-3; //mm / s
+
+        const Real trackLength = 8e-3; //mm
+        const Real pos = speed * t;
+        const Real track = std::floor(pos / trackLength);
+        const Real trackPos = (pos - track*trackLength);
+
+        const double sw = fmod(track, 2.);
+
+        center(0) = (1-sw)*(1e-3 + trackPos) + sw * (9e-3 - trackPos);
+        center(1) = 1e-3 + track * 0.5e-3;
+    }
+    else
+    {
+        return 0;
+    }
+
+    Real r = Point(Point(x,y) - center).norm();
+    if (r < 0.5e-3)
+    {
+        return 8.e7;
+    }
+    else
+    {
+        return 0.;
+    }
+}
+
+Number initial_value (const Point & p,
+                    const Parameters & parameters,
+                    const std::string &,
+                    const std::string &)
+{
+    return 293.;
 }
