@@ -202,14 +202,15 @@ int main (int argc, char ** argv)
       // Assemble & solve the linear system
       equation_systems.get_system("Heat-Transfer").solve();
 
-      // Output evey 10 timesteps to file.
-      if ((t_step+1)%10 == 0)
+      // Output evey N timesteps to file.
+      unsigned int N_Steps_To_Print=5;
+      if ((t_step+1)%N_Steps_To_Print == 0)
         {
 
 #ifdef LIBMESH_HAVE_EXODUS_API
           ExodusII_IO exo(mesh);
           exo.append(true);
-          exo.write_timestep (exodus_filename, equation_systems, t_step+1, system.time);
+          exo.write_timestep (exodus_filename, equation_systems, (t_step+1)/N_Steps_To_Print, system.time);
 #else
           std::ostringstream file_name;
 
