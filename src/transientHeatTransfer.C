@@ -22,6 +22,8 @@
 
 #include "libmesh/elem.h"
 
+#include "FlagByZ.h"
+
 using namespace libMesh;
 
 const boundary_id_type BOTTOM_BOUNDARY = 1;
@@ -95,14 +97,27 @@ int main (int argc, char ** argv)
   // distributed across the default MPI communicator.
   Mesh mesh(init.comm());
 
-  mesh.read ("mesh.xda");
+  mesh.read ("mesh3d.xda");
 
   // Create a MeshRefinement object to handle refinement of our mesh.
   // This class handles all the details of mesh refinement and coarsening.
   MeshRefinement mesh_refinement (mesh);
 
-  // Uniformly refine the mesh 5 times.
-  mesh_refinement.uniformly_refine (5);
+  mesh_refinement.uniformly_refine (3);
+
+  for (unsigned int i = 0; i < 3; i++)
+  {
+      mesh_refinement.clean_refinement_flags();
+
+      Real offset = 5e-3;
+      for (unsigned int j = 0; j < i; j++)
+      {
+          offset = offset * 0.5;
+      }
+      FlagByZ flagger(0, 10e-3 - offset , mesh);
+      mesh_refinement.flag_elements_by(flagger);
+      mesh_refinement.refine_and_coarsen_elements();
+  }
 
   // Print information about the mesh to the screen.
   mesh.print_info();
