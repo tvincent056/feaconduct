@@ -1,7 +1,7 @@
 #ifndef FLAGBYZ_H_
 #define FLAGBYZ_H_
 
-#include "mesh_refinement.h"
+#include "libmesh/mesh_refinement.h"
 
 namespace libMesh
 {
