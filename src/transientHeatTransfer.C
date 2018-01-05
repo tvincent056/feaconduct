@@ -79,7 +79,7 @@ int main (int argc, char ** argv)
                            "--enable-petsc, --enable-trilinos, or --enable-eigen");
 
   // This example requires Adaptive Mesh Refinement support - although
-  // it only refines uniformly, the refinement code used is the same
+  // it only refines statically, the refinement code used is the same
   // underneath
 #ifndef LIBMESH_ENABLE_AMR
   libmesh_example_requires(false, "--enable-amr");
@@ -88,11 +88,6 @@ int main (int argc, char ** argv)
   // Skip this 2D example if libMesh was compiled as 1D-only.
   libmesh_example_requires(2 <= LIBMESH_DIM, "2D support");
 
-  // Read the mesh from file.  This is the coarse mesh that will be used
-  // in example 10 to demonstrate adaptive mesh refinement.  Here we will
-  // simply read it in and uniformly refine it 5 times before we compute
-  // with it.
-  //
   // Create a mesh object, with dimension to be overridden later,
   // distributed across the default MPI communicator.
   Mesh mesh(init.comm());
